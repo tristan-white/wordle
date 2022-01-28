@@ -1,0 +1,11 @@
+=====MENU=====
+Choose a mode:
+
+"interactive"
+    Think of a 5 letter word and have the Wizard try to guess it while you give manual feedback. Enter "help feedback" to see syntax for feedback.
+
+"auto"
+    The Wizard tries to guess your word but feedback is given to the Wizard automatically.
+
+"batch"
+    Give the Wizard a list of words to guess. See statistics for the Wizard's performance.

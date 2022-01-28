@@ -1,25 +1,51 @@
-#!/usr/bin/python
-import cmd
-import sys
-
-
+#!/usr/bin/python3
+import cmd, sys
 
 char_freq = {"e":12.6,"t":9.37,"a":8.34,"o":7.7,"n":6.8,"i":6.7,"h":6.11,"s":6.11,"r":5.68,"l":4.24,"d":4.14,"u":2.85,"c":2.73,"m":2.53,"w":2.34,"y":2.04,"f":2.03,"g":1.92,"p":1.66,"b":1.54,"v":1.06,"k":0.87,"j":0.23,"x":0.20,"q":0.09,"z":0.06}
 
 class App(cmd.Cmd):
-    intro = "~ The Wordle Wizard ~\n"
-    prompt = "Which letters were correct? "
+    intro = "\n~~ The Wordle Wizard ~~\n\nEnter 'help' to see commands\n"
+    prompt = "(menu) "
 
-    dict_file = "dict.txt"
+    dict_file = "la.txt"
     freq_sums = {}
-    guess = ""
+    guess = "atone"
 
     correct = {}        # letters that are in the correct spot
     almost = {}         # letters that are not in the correct spot
     wrong = []          # letters that are not in the wordle
 
-    def do_setup(self, arg):
-        with open("dict.txt", "r") as f:
+    mode = "menu"
+
+    def do_menu(self):
+        with open("menu.txt", "r") as f:
+            print(f.read())
+    
+    def help_menu(self):
+        self.onecmd("menu")
+    
+    def do_interactive(self, arg):
+        self.mode = "interactive"
+        self.prompt = "(interactive) "
+        print(f"WIZARD: My guess is {self.guess.upper()}")
+        while self.mode == "interactive":
+            x = input("\t  feedback: ")
+            self.onecmd("feedback " + x)
+    
+    # def do_auto(self):
+    #     self.mode = "auto"
+    #     print(f"WIZARD: My guess is {self.guess.upper()}")
+    #     def getFeedback(word: str):
+            
+    #     while self.mode == "auto":
+    #         x = input("\t  feedback: ")
+
+    def do_wiz_art(self, arg):
+        with open("wizard.txt", "r") as f:
+            print(f.read())
+
+    def do_setup(self, arg: str):
+        with open(self.dict_file, "r") as f:
             words = f.read().splitlines()
             for w in words:
                 temp = "".join(set(w))
@@ -29,45 +55,108 @@ class App(cmd.Cmd):
                 self.freq_sums[w] = sum
         # sort `freq_sums` by value, from high to low
         self.freq_sums = dict(sorted(self.freq_sums.items(), key=lambda x:x[1], reverse=True))
-        # print(list(self.freq_sums)[:10])
+    
+    def do_suggest(self, arg: str):
+        for w in list(self.freq_sums)[:10]:
+            print(w)
 
-    def default(self, arg):
-        for i, c in enumerate(self.lastcmd):
-            if c != '*' or c != '-' or c != '+':
-                print("\nInvalid input. Note:\n'*' indicates the letter is correct AND in the correct spot.\n'+' indicates the letter is correct and NOT in the correct spot.\n'-' indicates the letter is not in the word.\n")
-                print("Exiting...")
-                sys.exit()
+    def do_f(self, arg):
+        self.onecmd("feedback " + arg)
 
-            if c == '-':
-                self.wrong.append(c)
-            if c == '*':
-                self.almost[c] = i
-            if c == '+':
-                self.correct[c] = i
+    def do_feedback(self, arg: str):
+        # First check format of feedback. Feedback should consist of either +,-,* chars or b,y,g chars
+        def verify(input: str):
+            if len(input) != 5:
+                return False
+            valid = "+-*byg"
+            for c in input:
+                if c not in valid:
+                    return False
+            return True
+
+        if not verify(arg):
+            print("Incorrect format.")
+            self.onecmd("help feedback")
+
+        else:
+            for i, mark in enumerate(arg):
+                letter = self.guess[i]
+                if mark == '-' or mark == 'b':
+                    # Check that the letter isn't marked elsewhere as 'almost' or 'correct'
+                    if letter not in self.wrong:
+                        self.wrong.append(letter)
+                if mark == '*' or mark == 'y':
+                    if letter not in self.almost.keys():
+                        self.almost[letter] = [i]
+                    elif i not in self.almost[letter]:
+                        self.almost[letter].append(i)
+                if mark == '+' or mark == 'g':
+                    if letter not in self.correct.keys():
+                        self.correct[letter] = [i]
+                    else:
+                        self.correct[letter].append(i)
+
+        # Now update the list of viable words based off of most recent feedback
+        def viable(word) -> bool:
+            # TODO: figure out what to do for repeat letters in words
+            for i,c in enumerate(word):
+                if c in self.wrong:
+                    return False
+                if c in self.almost.keys():
+                    if i in self.almost[c]:
+                        return False
+                if c in self.correct.keys():
+                    if i not in self.correct[c]:
+                        return False
+                # check if all clues are being used
+                for letter in self.correct.keys():
+                    if letter not in word:
+                        return False
+                for letter in self.almost.keys():
+                    if letter not in word:
+                        return False
+            return True
+
+        viable_words = []
+        for word in self.freq_sums.keys():
+            if viable(word):
+                viable_words.append(word)
+        
+        # Sort words by freq and put them back into self.freq_sums
+        bad_words = set(self.freq_sums.keys()) - set(viable_words)
+        for w in bad_words:
+            self.freq_sums.pop(w)
+                            
+        # Make new educated guess
+        if len(self.freq_sums):
+            self.guess = list(self.freq_sums)[0]
+            if len(self.freq_sums) == 1:
+                print(f"WIZARD: My last guess is {self.guess.upper()}. If that's not your word, double check your feedback.")
+                self.mode = "menu"
+                self.prompt = "(menu) "
+            else:
+                print(f"WIZARD: My guess is {self.guess.upper()}")
+        else:
+            print("Idk. You're word may not exist. You sure you gave me the correct clues?")
+            self.mode = "menu"
+            self.prompt = "(menu) "
+    
+    def help_feedback(self):
+        print("Feedback should be a 5 character string. Letters should be marked accordingly:\n")
+        print("'-' -> letter is not in the target word")
+        print("'*' -> letter is in the target word but in the incorrect position")
+        print("'+' -> letter is in the target word and in the correct position")
+        print("\nAlternatively, 'b', 'y', and 'g' (representing the black, yellow, and green words from the original Wordle game) can be used instead of '-', '*', '+' respectively")
+        print()
 
     def emptyline(self) -> bool:
         return super().emptyline()
-
-    def do_foo(self, arg):
-        print("hello world")
-
-    def do_test(self, arg):
-        print(arg)
-        print(arg)
     
-    def postcmd(self, stop: bool, line: str) -> bool:
-        # Update list of viable words
-        words = {}
-        for key in self.freq_sums.keys():
-            for c in self.wrong:
-                if c in key:
-                    continue
-            for c in self.almost.keys():
-                if c not in key or key[self.almost[c]] 
-
-        return super().postcmd(stop, line)
+    # def postcmd(self, stop: bool, line: str) -> bool:
+    #     return super().postcmd(stop, line)
 
 if __name__ == "__main__":
     app = App()
+    app.onecmd("wiz_art")
     app.onecmd("setup")
     app.cmdloop()
