@@ -9,7 +9,7 @@ class App(cmd.Cmd):
 
     dict_file = "la.txt"
     freq_sums = {}
-    guess = "atone"
+    guess = ""
 
     correct = {}        # letters that are in the correct spot
     almost = {}         # letters that are not in the correct spot
@@ -24,6 +24,9 @@ class App(cmd.Cmd):
     def help_menu(self):
         self.onecmd("menu")
     
+    def do_exit(self, arg):
+        exit()
+    
     def do_interactive(self, arg):
         self.mode = "interactive"
         self.prompt = "(interactive) "
@@ -31,20 +34,37 @@ class App(cmd.Cmd):
         while self.mode == "interactive":
             x = input("\t  feedback: ")
             self.onecmd("feedback " + x)
-    
-    # def do_auto(self):
-    #     self.mode = "auto"
-    #     print(f"WIZARD: My guess is {self.guess.upper()}")
-    #     def getFeedback(word: str):
-            
-    #     while self.mode == "auto":
-    #         x = input("\t  feedback: ")
+
+    def do_auto(self, arg):
+        self.mode = "auto"
+        target = input("Enter the word for the Wizard to guess: ")
+        print(f"WIZARD: My guess is {self.guess.upper()}")
+
+        def getFeedback(word: str) -> str:
+            ret = ""
+            for i,c in enumerate(self.guess):
+                if c in word:
+                    if word[i] == c:
+                        ret += "+"
+                    else:
+                        ret += "*"
+                else:
+                    ret += "-"
+            print(ret)
+            return ret
+
+        while self.mode == "auto":
+            self.onecmd("feedback " + getFeedback(target))
 
     def do_wiz_art(self, arg):
         with open("wizard.txt", "r") as f:
             print(f.read())
 
     def do_setup(self, arg: str):
+        self.guess = "atone"
+        self.wrong = []
+        self.almost = {}
+        self.correct = {}
         with open(self.dict_file, "r") as f:
             words = f.read().splitlines()
             for w in words:
@@ -134,12 +154,14 @@ class App(cmd.Cmd):
                 print(f"WIZARD: My last guess is {self.guess.upper()}. If that's not your word, double check your feedback.")
                 self.mode = "menu"
                 self.prompt = "(menu) "
+                self.onecmd("setup")
             else:
                 print(f"WIZARD: My guess is {self.guess.upper()}")
         else:
             print("Idk. You're word may not exist. You sure you gave me the correct clues?")
             self.mode = "menu"
             self.prompt = "(menu) "
+            self.onecmd("setup")
     
     def help_feedback(self):
         print("Feedback should be a 5 character string. Letters should be marked accordingly:\n")
