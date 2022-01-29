@@ -9,7 +9,10 @@ class App(cmd.Cmd):
 
     dict_file = "la.txt"
     freq_sums = {}
+    sorted_words = []
     guess = ""
+
+    num_guesses = 1
 
     correct = {}        # letters that are in the correct spot
     almost = {}         # letters that are not in the correct spot
@@ -27,6 +30,15 @@ class App(cmd.Cmd):
     def do_exit(self, arg):
         exit()
     
+    def do_wiz_art(self, arg):
+        with open("wizard.txt", "r") as f:
+            print(f.read())
+
+    # def do_batch(self, dict_file):
+    #     with open(dict_file, "r"):
+
+
+
     def do_interactive(self, arg):
         self.mode = "interactive"
         self.prompt = "(interactive) "
@@ -55,30 +67,27 @@ class App(cmd.Cmd):
 
         while self.mode == "auto":
             self.onecmd("feedback " + getFeedback(target))
+        return self.num_guesses
 
-    def do_wiz_art(self, arg):
-        with open("wizard.txt", "r") as f:
-            print(f.read())
 
-    def do_setup(self, arg: str):
+    def setup(self):
         self.guess = "atone"
         self.wrong = []
         self.almost = {}
         self.correct = {}
-        with open(self.dict_file, "r") as f:
-            words = f.read().splitlines()
-            for w in words:
-                temp = "".join(set(w))
-                sum = 0
-                for letter in temp:
-                    sum += char_freq[letter]
-                self.freq_sums[w] = sum
-        # sort `freq_sums` by value, from high to low
-        self.freq_sums = dict(sorted(self.freq_sums.items(), key=lambda x:x[1], reverse=True))
-    
-    def do_suggest(self, arg: str):
-        for w in list(self.freq_sums)[:10]:
-            print(w)
+        self.num_guesses = 1
+        if not self.sorted_words:
+            with open(self.dict_file, "r") as f:
+                words = f.read().splitlines()
+                for w in words:
+                    temp = "".join(set(w))
+                    sum = 0
+                    for letter in temp:
+                        sum += char_freq[letter]
+                    self.freq_sums[w] = sum
+            # sort `freq_sums` by value, from high to low
+            self.freq_sums = dict(sorted(self.freq_sums.items(), key=lambda x:x[1], reverse=True))
+            self.sorted_words = self.freq_sums.keys()
 
     def do_f(self, arg):
         self.onecmd("feedback " + arg)
@@ -138,30 +147,31 @@ class App(cmd.Cmd):
             return True
 
         viable_words = []
-        for word in self.freq_sums.keys():
+        for word in self.sorted_words:
             if viable(word):
                 viable_words.append(word)
         
         # Sort words by freq and put them back into self.freq_sums
-        bad_words = set(self.freq_sums.keys()) - set(viable_words)
-        for w in bad_words:
-            self.freq_sums.pop(w)
+        # bad_words = set(self.sorted_words) - set(viable_words)
+        # for w in bad_words:
+        #     self.freq_sums.pop(w)
                             
         # Make new educated guess
-        if len(self.freq_sums):
-            self.guess = list(self.freq_sums)[0]
-            if len(self.freq_sums) == 1:
-                print(f"WIZARD: My last guess is {self.guess.upper()}. If that's not your word, double check your feedback.")
+        if len(viable_words):
+            self.guess = viable_words[0]
+            print(f"WIZARD: My guess is {self.guess.upper()}")
+            self.num_guesses += 1
+            if len(viable_words) == 1:
+                print("If that's not your word, double check your feedback.")
                 self.mode = "menu"
                 self.prompt = "(menu) "
-                self.onecmd("setup")
-            else:
-                print(f"WIZARD: My guess is {self.guess.upper()}")
+                self.setup()
         else:
             print("Idk. You're word may not exist. You sure you gave me the correct clues?")
+            exit()
             self.mode = "menu"
             self.prompt = "(menu) "
-            self.onecmd("setup")
+            self.setup()
     
     def help_feedback(self):
         print("Feedback should be a 5 character string. Letters should be marked accordingly:\n")
@@ -180,5 +190,5 @@ class App(cmd.Cmd):
 if __name__ == "__main__":
     app = App()
     app.onecmd("wiz_art")
-    app.onecmd("setup")
+    app.setup()
     app.cmdloop()
