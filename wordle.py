@@ -34,11 +34,25 @@ class App(cmd.Cmd):
         with open("wizard.txt", "r") as f:
             print(f.read())
 
-    # def do_batch(self, dict_file):
-    #     with open(dict_file, "r"):
-
-
-
+    def do_stats(self, arg):
+        guess_counts = {}
+        total = 0
+        with open("la.txt", "r") as f:
+            for w in f.read().splitlines():
+                g = self.get_guess()
+                while g != w:
+                    self.read_clue(self.getFeedback(g))
+                    g = self.get_guess()
+                # Record number of guesses
+                if self.num_guesses not in guess_counts:
+                    guess_counts[self.num_guesses] = 1
+                else:
+                    guess_counts[self.num_guesses] += 1
+                total += 1
+                if not (total % 10):
+                    print(total)
+        print(guess_counts)
+                
     def do_interactive(self, arg):
         self.mode = "interactive"
         self.prompt = "(interactive) "
@@ -47,27 +61,27 @@ class App(cmd.Cmd):
             x = input("\t  feedback: ")
             self.onecmd("feedback " + x)
 
+    def getFeedback(self, word: str) -> str:
+        ret = ""
+        for i,c in enumerate(self.guess):
+            if c in word:
+                if word[i] == c:
+                    ret += "+"
+                else:
+                    ret += "*"
+            else:
+                ret += "-"
+        # print(ret)
+        return ret
+
     def do_auto(self, arg):
         self.mode = "auto"
         target = input("Enter the word for the Wizard to guess: ")
         print(f"WIZARD: My guess is {self.guess.upper()}")
 
-        def getFeedback(word: str) -> str:
-            ret = ""
-            for i,c in enumerate(self.guess):
-                if c in word:
-                    if word[i] == c:
-                        ret += "+"
-                    else:
-                        ret += "*"
-                else:
-                    ret += "-"
-            print(ret)
-            return ret
-
         while self.mode == "auto":
-            self.onecmd("feedback " + getFeedback(target))
-        return self.num_guesses
+            self.onecmd("feedback " + self.getFeedback(target))
+        # return self.num_guesses
 
 
     def setup(self):
@@ -92,6 +106,59 @@ class App(cmd.Cmd):
     def do_f(self, arg):
         self.onecmd("feedback " + arg)
 
+    def viable(self, word) -> bool:
+        # TODO: figure out what to do for repeat letters in words
+        for i,c in enumerate(word):
+            if c in self.wrong:
+                return False
+            if c in self.almost.keys():
+                if i in self.almost[c]:
+                    return False
+            if c in self.correct.keys():
+                if i not in self.correct[c]:    
+                    for pos in self.correct[c]:
+                        if c != word[pos]:
+                            return False
+
+            # check if all clues are being used
+            for letter in self.correct.keys():
+                if letter not in word:
+                    return False
+            for letter in self.almost.keys():
+                if letter not in word:
+                    return False
+        return True
+
+    def read_clue(self, clue):
+        for i, mark in enumerate(clue):
+            letter = self.guess[i]
+            if mark == '-' or mark == 'b':
+                # Check that the letter isn't marked elsewhere as 'almost' or 'correct'
+                if letter not in self.wrong:
+                    self.wrong.append(letter)
+            if mark == '*' or mark == 'y':
+                if letter not in self.almost.keys():
+                    self.almost[letter] = [i]
+                elif i not in self.almost[letter]:
+                    self.almost[letter].append(i)
+            if mark == '+' or mark == 'g':
+                if letter not in self.correct.keys():
+                    self.correct[letter] = [i]
+                else:
+                    self.correct[letter].append(i)
+
+    # Makes a new guess
+    def get_guess(self) -> str:
+        if not len(self.sorted_words):
+            return ""
+        self.num_guesses += 1
+        viable_words = []
+        for word in self.sorted_words:
+            if self.viable(word):
+                viable_words.append(word)
+        if len(viable_words):
+            return viable_words[0]
+
     def do_feedback(self, arg: str):
         # First check format of feedback. Feedback should consist of either +,-,* chars or b,y,g chars
         def verify(input: str):
@@ -103,65 +170,19 @@ class App(cmd.Cmd):
                     return False
             return True
 
+        
         if not verify(arg):
             print("Incorrect format.")
             self.onecmd("help feedback")
 
         else:
-            for i, mark in enumerate(arg):
-                letter = self.guess[i]
-                if mark == '-' or mark == 'b':
-                    # Check that the letter isn't marked elsewhere as 'almost' or 'correct'
-                    if letter not in self.wrong:
-                        self.wrong.append(letter)
-                if mark == '*' or mark == 'y':
-                    if letter not in self.almost.keys():
-                        self.almost[letter] = [i]
-                    elif i not in self.almost[letter]:
-                        self.almost[letter].append(i)
-                if mark == '+' or mark == 'g':
-                    if letter not in self.correct.keys():
-                        self.correct[letter] = [i]
-                    else:
-                        self.correct[letter].append(i)
-
-        # Now update the list of viable words based off of most recent feedback
-        def viable(word) -> bool:
-            # TODO: figure out what to do for repeat letters in words
-            for i,c in enumerate(word):
-                if c in self.wrong:
-                    return False
-                if c in self.almost.keys():
-                    if i in self.almost[c]:
-                        return False
-                if c in self.correct.keys():
-                    if i not in self.correct[c]:
-                        return False
-                # check if all clues are being used
-                for letter in self.correct.keys():
-                    if letter not in word:
-                        return False
-                for letter in self.almost.keys():
-                    if letter not in word:
-                        return False
-            return True
-
-        viable_words = []
-        for word in self.sorted_words:
-            if viable(word):
-                viable_words.append(word)
-        
-        # Sort words by freq and put them back into self.freq_sums
-        # bad_words = set(self.sorted_words) - set(viable_words)
-        # for w in bad_words:
-        #     self.freq_sums.pop(w)
-                            
+            self.read_clue(arg)
+                                        
         # Make new educated guess
-        if len(viable_words):
-            self.guess = viable_words[0]
-            print(f"WIZARD: My guess is {self.guess.upper()}")
-            self.num_guesses += 1
-            if len(viable_words) == 1:
+        guess = self.get_guess
+        if guess:
+            print(f"WIZARD: My guess is {guess.upper()}")
+            if len(self.sorted_words) == 1:
                 print("If that's not your word, double check your feedback.")
                 self.mode = "menu"
                 self.prompt = "(menu) "
