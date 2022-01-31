@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import cmd, sys
+from tqdm import tqdm
 
 char_freq = {"e":12.6,"t":9.37,"a":8.34,"o":7.7,"n":6.8,"i":6.7,"h":6.11,"s":6.11,"r":5.68,"l":4.24,"d":4.14,"u":2.85,"c":2.73,"m":2.53,"w":2.34,"y":2.04,"f":2.03,"g":1.92,"p":1.66,"b":1.54,"v":1.06,"k":0.87,"j":0.23,"x":0.20,"q":0.09,"z":0.06}
 
@@ -36,22 +37,37 @@ class App(cmd.Cmd):
 
     def do_stats(self, arg):
         guess_counts = {}
+        for i in range(1,13):
+            guess_counts[i] = 0        
         total = 0
         with open("la.txt", "r") as f:
-            for w in f.read().splitlines():
-                g = self.get_guess()
-                while g != w:
-                    self.read_clue(self.getFeedback(g))
-                    g = self.get_guess()
-                # Record number of guesses
-                if self.num_guesses not in guess_counts:
-                    guess_counts[self.num_guesses] = 1
-                else:
+            words = f.read().splitlines()
+            with tqdm(total=len(words)) as pbar:
+                for w in words:
+                    self.setup()
+                    while self.guess != w:
+                        self.read_clue(self.getFeedback(w))
+                        self.guess = self.get_guess()
+                    # Record number of guesses
                     guess_counts[self.num_guesses] += 1
-                total += 1
-                if not (total % 10):
-                    print(total)
-        print(guess_counts)
+                    if self.num_guesses == 10:
+                        print(w)
+                    total += 1
+                    pbar.update(1)
+        # Figure out stats
+        average = 0
+        for key in guess_counts.keys():
+            average += key * (guess_counts[key] / total)
+            print(f"{key} Guess: {(guess_counts[key] / total) * 100}%")
+        print(f"{'=' * 12}\nAverage: {average}")
+    
+    def do_test(self, target):
+        self.setup()
+        while self.guess != target:
+            print(self.guess, self.num_guesses)
+            self.read_clue(self.getFeedback(target))
+            self.guess = self.get_guess()
+        print(f"took {self.num_guesses} guesses")
                 
     def do_interactive(self, arg):
         self.mode = "interactive"
@@ -71,18 +87,15 @@ class App(cmd.Cmd):
                     ret += "*"
             else:
                 ret += "-"
-        # print(ret)
         return ret
 
     def do_auto(self, arg):
-        self.mode = "auto"
         target = input("Enter the word for the Wizard to guess: ")
         print(f"WIZARD: My guess is {self.guess.upper()}")
 
-        while self.mode == "auto":
+        while self.guess != target:
             self.onecmd("feedback " + self.getFeedback(target))
-        # return self.num_guesses
-
+        self.setup()
 
     def setup(self):
         self.guess = "atone"
@@ -147,7 +160,8 @@ class App(cmd.Cmd):
                 else:
                     self.correct[letter].append(i)
 
-    # Makes a new guess
+    # Makes a new guess based off of info from self.wrong, self.correct, and self.almost
+    # Typically, read_clue() should be called first
     def get_guess(self) -> str:
         if not len(self.sorted_words):
             return ""
@@ -157,7 +171,8 @@ class App(cmd.Cmd):
             if self.viable(word):
                 viable_words.append(word)
         if len(viable_words):
-            return viable_words[0]
+            self.guess = viable_words[0]
+            return self.guess
 
     def do_feedback(self, arg: str):
         # First check format of feedback. Feedback should consist of either +,-,* chars or b,y,g chars
@@ -174,12 +189,14 @@ class App(cmd.Cmd):
         if not verify(arg):
             print("Incorrect format.")
             self.onecmd("help feedback")
+            # returning False will 
+            return False
 
         else:
             self.read_clue(arg)
                                         
         # Make new educated guess
-        guess = self.get_guess
+        guess = self.get_guess()
         if guess:
             print(f"WIZARD: My guess is {guess.upper()}")
             if len(self.sorted_words) == 1:
