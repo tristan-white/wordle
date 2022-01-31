@@ -1,0 +1,1 @@
+Think of a 5 letter word and have the Wizard try to guess it while you give manual feedback. Enter "help feedback" to see syntax for feedback.

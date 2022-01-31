@@ -6,7 +6,9 @@ char_freq = {"e":12.6,"t":9.37,"a":8.34,"o":7.7,"n":6.8,"i":6.7,"h":6.11,"s":6.1
 
 class App(cmd.Cmd):
     intro = "\n~~ The Wordle Wizard ~~\n\nEnter 'help' to see commands\n"
-    prompt = "(menu) "
+    prompt = ">>> "
+
+    mode = ""
 
     dict_file = "la.txt"
     freq_sums = {}
@@ -18,21 +20,19 @@ class App(cmd.Cmd):
     correct = {}        # letters that are in the correct spot
     almost = {}         # letters that are not in the correct spot
     wrong = []          # letters that are not in the wordle
-
-    mode = "menu"
-
-    def do_menu(self):
-        with open("menu.txt", "r") as f:
-            print(f.read())
     
-    def help_menu(self):
-        self.onecmd("menu")
-    
+    def help_exit(self):
+        print("Exits the program.")
+
     def do_exit(self, arg):
         exit()
     
-    def do_wiz_art(self, arg):
+    def wiz_art(self):
         with open("wizard.txt", "r") as f:
+            print(f.read())
+
+    def help_stats(self):
+        with open("./txt/help_stats.txt", "r") as f:
             print(f.read())
 
     def do_stats(self, arg):
@@ -40,9 +40,10 @@ class App(cmd.Cmd):
         for i in range(1,13):
             guess_counts[i] = 0        
         total = 0
-        with open("la.txt", "r") as f:
+        dict_file = "la.txt" if arg == "" else arg
+        with open(dict_file, "r") as f:
             words = f.read().splitlines()
-            with tqdm(total=len(words)) as pbar:
+            with tqdm(total=len(words), desc="Progress...", unit="words") as pbar:
                 for w in words:
                     self.setup()
                     while self.guess != w:
@@ -50,8 +51,6 @@ class App(cmd.Cmd):
                         self.guess = self.get_guess()
                     # Record number of guesses
                     guess_counts[self.num_guesses] += 1
-                    if self.num_guesses == 10:
-                        print(w)
                     total += 1
                     pbar.update(1)
         # Figure out stats
@@ -61,21 +60,17 @@ class App(cmd.Cmd):
             print(f"{key} Guess: {(guess_counts[key] / total) * 100}%")
         print(f"{'=' * 12}\nAverage: {average}")
     
-    def do_test(self, target):
-        self.setup()
-        while self.guess != target:
-            print(self.guess, self.num_guesses)
-            self.read_clue(self.getFeedback(target))
-            self.guess = self.get_guess()
-        print(f"took {self.num_guesses} guesses")
-                
+    def help_interactive(self):
+        with open("./txt/help_interactive.txt", "r") as f:
+            print(f.read())
+
     def do_interactive(self, arg):
         self.mode = "interactive"
         self.prompt = "(interactive) "
         print(f"WIZARD: My guess is {self.guess.upper()}")
         while self.mode == "interactive":
             x = input("\t  feedback: ")
-            self.onecmd("feedback " + x)
+            self.feedback(x)
 
     def getFeedback(self, word: str) -> str:
         ret = ""
@@ -89,12 +84,16 @@ class App(cmd.Cmd):
                 ret += "-"
         return ret
 
+    def help_auto(self):
+        with open("./txt/help_auto.txt", "r") as f:
+            print(f.read())
+
     def do_auto(self, arg):
         target = input("Enter the word for the Wizard to guess: ")
         print(f"WIZARD: My guess is {self.guess.upper()}")
 
         while self.guess != target:
-            self.onecmd("feedback " + self.getFeedback(target))
+            self.feedback(self.getFeedback(target))
         self.setup()
 
     def setup(self):
@@ -115,9 +114,6 @@ class App(cmd.Cmd):
             # sort `freq_sums` by value, from high to low
             self.freq_sums = dict(sorted(self.freq_sums.items(), key=lambda x:x[1], reverse=True))
             self.sorted_words = self.freq_sums.keys()
-
-    def do_f(self, arg):
-        self.onecmd("feedback " + arg)
 
     def viable(self, word) -> bool:
         # TODO: figure out what to do for repeat letters in words
@@ -174,7 +170,11 @@ class App(cmd.Cmd):
             self.guess = viable_words[0]
             return self.guess
 
-    def do_feedback(self, arg: str):
+    def help_feedback(self):
+        with open("./txt/help_feedback.txt", "r") as f:
+                print(f.read())
+
+    def feedback(self, arg: str):
         # First check format of feedback. Feedback should consist of either +,-,* chars or b,y,g chars
         def verify(input: str):
             if len(input) != 5:
@@ -184,13 +184,11 @@ class App(cmd.Cmd):
                 if c not in valid:
                     return False
             return True
-
         
         if not verify(arg):
             print("Incorrect format.")
-            self.onecmd("help feedback")
-            # returning False will 
-            return False
+            with open("./txt/help_feedback.txt", "r") as f:
+                print(f.read())
 
         else:
             self.read_clue(arg)
@@ -202,22 +200,13 @@ class App(cmd.Cmd):
             if len(self.sorted_words) == 1:
                 print("If that's not your word, double check your feedback.")
                 self.mode = "menu"
-                self.prompt = "(menu) "
+                self.prompt = ">>> "
                 self.setup()
         else:
             print("Idk. You're word may not exist. You sure you gave me the correct clues?")
-            exit()
             self.mode = "menu"
-            self.prompt = "(menu) "
+            self.prompt = ">>> "
             self.setup()
-    
-    def help_feedback(self):
-        print("Feedback should be a 5 character string. Letters should be marked accordingly:\n")
-        print("'-' -> letter is not in the target word")
-        print("'*' -> letter is in the target word but in the incorrect position")
-        print("'+' -> letter is in the target word and in the correct position")
-        print("\nAlternatively, 'b', 'y', and 'g' (representing the black, yellow, and green words from the original Wordle game) can be used instead of '-', '*', '+' respectively")
-        print()
 
     def emptyline(self) -> bool:
         return super().emptyline()
@@ -227,6 +216,6 @@ class App(cmd.Cmd):
 
 if __name__ == "__main__":
     app = App()
-    app.onecmd("wiz_art")
+    app.wiz_art()
     app.setup()
     app.cmdloop()

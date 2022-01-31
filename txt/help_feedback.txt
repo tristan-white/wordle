@@ -1,0 +1,5 @@
+Feedback should be a 5 character string. Letters should be marked accordingly:
+'-' -> letter is not in the target word
+'*' -> letter is in the target word but in the incorrect position
+'+' -> letter is in the target word and in the correct position
+Alternatively, 'b', 'y', and 'g' (representing the black, yellow, and green words from the original Wordle game) can be used instead of '-', '*', '+' respectively

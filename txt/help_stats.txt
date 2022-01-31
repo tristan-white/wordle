@@ -1,0 +1,1 @@
+Get statistics about the Wizards performance at guessing words. By default, the wizard will guess every word in the bank of possible Wordle solutions. If an argument is given with the path of a line separated list of words, it will give statistics on guessing those words instead. Note: The Wizard will still only treat the words in "la.txt" as possible solutions.
