@@ -1,2 +1,5 @@
 __pycache__
 playground.py
+testing/**
+char_counter.py
+wizard.txt
