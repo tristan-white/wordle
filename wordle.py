@@ -1,221 +1,270 @@
 #!/usr/bin/python3
-import cmd, sys
 from tqdm import tqdm
+import random
+from itertools import product
+from math import log2
+from copy import deepcopy
+import matplotlib.pyplot as plt
+ 
+BLACK = "\U00002B1B"
+YELLOW = "\U0001F7E8"
+GREEN = "\U0001F7E9"
 
-char_freq = {"e":12.6,"t":9.37,"a":8.34,"o":7.7,"n":6.8,"i":6.7,"h":6.11,"s":6.11,"r":5.68,"l":4.24,"d":4.14,"u":2.85,"c":2.73,"m":2.53,"w":2.34,"y":2.04,"f":2.03,"g":1.92,"p":1.66,"b":1.54,"v":1.06,"k":0.87,"j":0.23,"x":0.20,"q":0.09,"z":0.06}
+class Clues():
+    wrong = {}
+    correct = {}
+    almost = {}
+    last_guess = ""
+    last_pattern = ""
 
-class App(cmd.Cmd):
-    intro = "\n~~ The Wordle Wizard ~~\n\nEnter 'help' to see commands\n"
-    prompt = ">>> "
+    black_letters = []
+    gy_letters = []
 
-    mode = ""
+    def __str__(self):
+        return f"{self.wrong = }\n{self.correct = }\n{self.almost = }"
 
-    dict_file = "la.txt"
-    freq_sums = {}
-    sorted_words = []
-    guess = ""
-
-    num_guesses = 1
-
-    correct = {}        # letters that are in the correct spot
-    almost = {}         # letters that are not in the correct spot
-    wrong = []          # letters that are not in the wordle
-    
-    def help_exit(self):
-        print("Exits the program.")
-
-    def do_exit(self, arg):
-        exit()
-    
-    def wiz_art(self):
-        with open("wizard.txt", "r") as f:
-            print(f.read())
-
-    def help_stats(self):
-        with open("./txt/help_stats.txt", "r") as f:
-            print(f.read())
-
-    def do_stats(self, arg):
-        guess_counts = {}
-        for i in range(1,13):
-            guess_counts[i] = 0        
-        total = 0
-        dict_file = "la.txt" if arg == "" else arg
-        with open(dict_file, "r") as f:
-            words = f.read().splitlines()
-            with tqdm(total=len(words), desc="Progress...", unit="words") as pbar:
-                for w in words:
-                    self.setup()
-                    while self.guess != w:
-                        self.read_clue(self.getFeedback(w))
-                        self.guess = self.get_guess()
-                    # Record number of guesses
-                    guess_counts[self.num_guesses] += 1
-                    total += 1
-                    pbar.update(1)
-        # Figure out stats
-        average = 0
-        for key in guess_counts.keys():
-            average += key * (guess_counts[key] / total)
-            print(f"{key} Guess: {(guess_counts[key] / total) * 100}%")
-        print(f"{'=' * 12}\nAverage: {average}")
-    
-    def help_interactive(self):
-        with open("./txt/help_interactive.txt", "r") as f:
-            print(f.read())
-
-    def do_interactive(self, arg):
-        self.mode = "interactive"
-        self.prompt = "(interactive) "
-        print(f"WIZARD: My guess is {self.guess.upper()}")
-        while self.mode == "interactive":
-            x = input("\t  feedback: ")
-            self.feedback(x)
-
-    def getFeedback(self, word: str) -> str:
-        ret = ""
-        for i,c in enumerate(self.guess):
-            if c in word:
-                if word[i] == c:
-                    ret += "+"
-                else:
-                    ret += "*"
+def getPattern(target: str, guess: str):
+    green_indexes = []
+    yellow_indexes = []
+    seen = {}
+    # green pass
+    for i,l in enumerate(guess):
+        if l == target[i]:
+            green_indexes.append(i)
+            if l not in seen:
+                seen[l] = 1
             else:
-                ret += "-"
-        return ret
-
-    def help_auto(self):
-        with open("./txt/help_auto.txt", "r") as f:
-            print(f.read())
-
-    def do_auto(self, arg):
-        target = input("Enter the word for the Wizard to guess: ")
-        print(f"WIZARD: My guess is {self.guess.upper()}")
-
-        while self.guess != target:
-            self.feedback(self.getFeedback(target))
-        self.setup()
-
-    def setup(self):
-        self.guess = "atone"
-        self.wrong = []
-        self.almost = {}
-        self.correct = {}
-        self.num_guesses = 1
-        if not self.sorted_words:
-            with open(self.dict_file, "r") as f:
-                words = f.read().splitlines()
-                for w in words:
-                    temp = "".join(set(w))
-                    sum = 0
-                    for letter in temp:
-                        sum += char_freq[letter]
-                    self.freq_sums[w] = sum
-            # sort `freq_sums` by value, from high to low
-            self.freq_sums = dict(sorted(self.freq_sums.items(), key=lambda x:x[1], reverse=True))
-            self.sorted_words = self.freq_sums.keys()
-
-    def viable(self, word) -> bool:
-        # TODO: figure out what to do for repeat letters in words
-        for i,c in enumerate(word):
-            if c in self.wrong:
-                return False
-            if c in self.almost.keys():
-                if i in self.almost[c]:
-                    return False
-            if c in self.correct.keys():
-                if i not in self.correct[c]:    
-                    for pos in self.correct[c]:
-                        if c != word[pos]:
-                            return False
-
-            # check if all clues are being used
-            for letter in self.correct.keys():
-                if letter not in word:
-                    return False
-            for letter in self.almost.keys():
-                if letter not in word:
-                    return False
-        return True
-
-    def read_clue(self, clue):
-        for i, mark in enumerate(clue):
-            letter = self.guess[i]
-            if mark == '-' or mark == 'b':
-                # Check that the letter isn't marked elsewhere as 'almost' or 'correct'
-                if letter not in self.wrong:
-                    self.wrong.append(letter)
-            if mark == '*' or mark == 'y':
-                if letter not in self.almost.keys():
-                    self.almost[letter] = [i]
-                elif i not in self.almost[letter]:
-                    self.almost[letter].append(i)
-            if mark == '+' or mark == 'g':
-                if letter not in self.correct.keys():
-                    self.correct[letter] = [i]
-                else:
-                    self.correct[letter].append(i)
-
-    # Makes a new guess based off of info from self.wrong, self.correct, and self.almost
-    # Typically, read_clue() should be called first
-    def get_guess(self) -> str:
-        if not len(self.sorted_words):
-            return ""
-        self.num_guesses += 1
-        viable_words = []
-        for word in self.sorted_words:
-            if self.viable(word):
-                viable_words.append(word)
-        if len(viable_words):
-            self.guess = viable_words[0]
-            return self.guess
-
-    def help_feedback(self):
-        with open("./txt/help_feedback.txt", "r") as f:
-                print(f.read())
-
-    def feedback(self, arg: str):
-        # First check format of feedback. Feedback should consist of either +,-,* chars or b,y,g chars
-        def verify(input: str):
-            if len(input) != 5:
-                return False
-            valid = "+-*byg"
-            for c in input:
-                if c not in valid:
-                    return False
-            return True
-        
-        if not verify(arg):
-            print("Incorrect format.")
-            with open("./txt/help_feedback.txt", "r") as f:
-                print(f.read())
-
+                seen[l] += 1
+    # yellow pass
+    for i,l in enumerate(guess):
+        if l in target:
+            if i not in green_indexes:
+                if l not in seen:
+                    yellow_indexes.append(i)
+                    if l not in seen:
+                        seen[l] = 1
+                    else:
+                        seen[l] += 1
+                elif target.count(l) > seen[l]:
+                    yellow_indexes.append(i)
+                    seen[l] += 1
+    ret = ""
+    for i in range(5):
+        if i in green_indexes:
+            ret += "g"
+        elif i in yellow_indexes:
+            ret += "y"
         else:
-            self.read_clue(arg)
-                                        
-        # Make new educated guess
-        guess = self.get_guess()
-        if guess:
-            print(f"WIZARD: My guess is {guess.upper()}")
-            if len(self.sorted_words) == 1:
-                print("If that's not your word, double check your feedback.")
-                self.mode = "menu"
-                self.prompt = ">>> "
-                self.setup()
-        else:
-            print("Idk. You're word may not exist. You sure you gave me the correct clues?")
-            self.mode = "menu"
-            self.prompt = ">>> "
-            self.setup()
+            ret += "b"
+    return ret
 
-    def emptyline(self) -> bool:
-        return super().emptyline()
+def emojize(pattern):
+    return pattern.replace("b", BLACK).replace("y", YELLOW).replace("g", GREEN)
+
+def entropy(viable: list, guess: str):
+    assert(guess in viable)
+    temp = list(product(["b", "y", "g"], repeat=5))
+    patterns = {}
+    for x in temp:
+        s = "".join(x)
+        patterns[s] = 0
+    # find patter for every word
+    for w in viable:
+        patterns[getPattern(w, guess)] += 1
+
+    probs = []
+    for p in patterns:
+        probs.append(patterns[p]/len(viable))
+    sum = 0
+    for p in probs:
+        if p:
+            sum += p * log2(1/p)
+    return sum
+
+def letter_counter(letters: list, c: str):
+    '''Count occurences of char c in letters'''
+    ret = 0
+    for l in letters:
+        if l == c:
+            ret += 1
+    return ret
+
+def valid(clues: Clues, word, debug=False):
+    # Green pass
+    if "g" in clues.last_pattern:
+        for c in clues.correct:
+            for i in clues.correct[c]:
+                if word[i] != c:
+                    return False
+    # Black pass
+    if "b" in clues.last_pattern:
+        # black_letters = [clues.last_guess[i] for i,c in enumerate(clues.last_pattern) if c == "b"]
+        # gy_letters = [clues.last_guess[i] for i,c in enumerate(clues.last_pattern) if c != "b"]
+        for l in clues.black_letters:
+            if l in word:
+                if l not in clues.gy_letters:
+                    return False
+                if letter_counter(clues.gy_letters, l) < word.count(l):
+                    return False
+    # Yellow pass
+    if "y" in clues.last_pattern:
+        for c in clues.almost:
+            if c not in word:
+                return False
+            for i in clues.almost[c]:
+                if word[i] == c:
+                    return False
+    return True
     
-    # def postcmd(self, stop: bool, line: str) -> bool:
-    #     return super().postcmd(stop, line)
+def read_pattern(clues: Clues, pattern: str, guess: str):
+    """Reads a pattern returned from `getPattern()` and then 
+    updates Clues class to reflect new information learned.
+    """
+    # Green pass:
+    for i, mark in enumerate(pattern):
+        letter = guess[i]
+        if mark == 'g':
+            if letter not in clues.correct:
+                clues.correct[letter] = [i]
+            elif i not in clues.correct[letter]:
+                clues.correct[letter].append(i)
+    # Yellow pass:
+    for i, mark in enumerate(pattern):
+        letter = guess[i]
+        if mark == 'y':
+            if letter not in clues.almost:
+                clues.almost[letter] = [i]
+            elif i not in clues.almost[letter]:
+                clues.almost[letter].append(i)
+    # Black pass:
+    for i, mark in enumerate(pattern):
+        letter = guess[i]
+        if mark == 'b':
+            if letter not in clues.wrong:
+                clues.wrong[letter] = [i]
+            elif i not in clues.wrong[letter]:
+                clues.wrong[letter].append(i)
 
-if __name__ == "__main__":
-    app = App()
-    app.wiz_art()
-    app.setup()
-    app.cmdloop()
+def bestGuess(viable: list):
+    assert(len(viable) != 0)
+    if len(viable) == 1:
+        return viable[0]
+    guess = ""
+    bits = 0
+    for w in viable:
+        temp = entropy(viable, w)
+        if temp > bits:
+            bits = temp
+            guess = w
+    return guess
+
+def refine_list(clues: Clues, viable: list):
+    ret = []
+    for w in viable:
+        clues.black_letters = [clues.last_guess[i] for i,c in enumerate(clues.last_pattern) if c == "b"]
+        clues.gy_letters = [clues.last_guess[i] for i,c in enumerate(clues.last_pattern) if c != "b"]
+        if valid(clues, w):
+            ret.append(w)
+    return ret
+
+def loadWords(path):
+    words = []
+    with open(path, "r") as f:
+        words = f.read().splitlines()
+    return words
+
+def solve(starter: str, target: str, words: list, display=False, debug=False):
+    """
+    starter: the first guess
+    target: the secret word (ie the solution)
+    words: list of words that are possibly the solution
+    display=False: prints each guess if True
+    """
+    clues = Clues()
+    clues.almost = {}
+    clues.correct = {}
+    clues.wrong = {}
+    num_guess = 1
+    clues.last_guess = starter
+
+    while clues.last_guess != target:
+        if display:
+            print(f"Guess #{num_guess}: {clues.last_guess} {emojize(getPattern(target, clues.last_guess))}")
+        num_guess += 1
+        pattern = getPattern(target, clues.last_guess)
+        clues.last_pattern = pattern
+        if debug:
+            # print(words)
+            print(clues)
+        read_pattern(clues, pattern, clues.last_guess)
+        words = refine_list(clues, words)
+        clues.last_guess = bestGuess(words)
+        if num_guess > 10:
+            print(f"\tAlert: high guess count for '{target}'")
+            exit()
+    if display:
+        print(f"Guess #{num_guess}: {clues.last_guess} {emojize(getPattern(target, clues.last_guess))}")
+    return num_guess
+
+def avg(score_dict):
+    word_count = 0
+    guess_count = 0
+    for n in score_dict:
+        word_count += score_dict[n]
+        guess_count += n * score_dict[n]
+    return guess_count / word_count
+
+def guessAvg(starter):
+    score = {}
+    for i in range(1,15):
+        score[i] = 0
+    words = loadWords("al.txt")
+    with tqdm(total=len(words), desc="Progress...", unit="words") as pbar:
+        for i,w in enumerate(words):
+            words_copy = deepcopy(words)
+            # print(f"TARGET:  {w}")
+            n = solve(starter, w, words_copy, display=False)
+            score[n] += 1
+            pbar.update(1)
+            # print(i)
+    print(score)
+    print(avg(score))
+    return score
+
+def test():
+    with open("al.txt", "r") as f:
+        words = f.read().splitlines()
+        n = solve("frame", words, display=True, debug=False)
+        print(n)
+        # solve("world", words)
+
+# test()
+# guessAvg("crane")
+
+def interactive():
+    """Takes input and then guesses the solution"""
+    words = loadWords("./al.txt")
+    while True:
+        target = input("Enter the target word (or 'exit' to exit): ")
+        if target == "exit":
+            exit()
+        if target not in words:
+            print("That is not a viable solution")
+            continue
+        solve("raise", target, words, display=True)
+# interactive()
+
+def plotScore(score: dict, title: str):
+    fig = plt.figure()
+    counts = [i for i in score if score[i]]
+    guesses = [score[x] for x in score if score[x]]
+    bars = plt.bar(counts, guesses, width=0.9)
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x(), yval + 1, yval)
+    plt.title(title)
+    plt.show()
+
+# plotScore({1: 1, 2: 131, 3: 970, 4: 936, 5: 217, 6: 48, 7: 10, 8: 2, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0},
+# "Maximum Entropy Results")
+guessAvg("serai")
